@@ -1,26 +1,70 @@
 #!/bin/bash
 #SBATCH -p gpu20
 #SBATCH -t 0-02:00:00
+#SBATCH -a 1-2
 #SBATCH -c 14
 #SBATCH --gres gpu:1
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem=50G
-#SBATCH -o /CT/eeg-3d-face/work/sapiens_pose_kartik/cluster/logs/%A_%a_%x_%N.out
-#SBATCH -e /CT/eeg-3d-face/work/sapiens_pose_kartik/cluster/logs/%A_%a_%x_%N.err
 
+# The log files will now be unique for each job in the array because '%a' is the Array Task ID.
+# %A is the main Job ID, %a is the specific task ID within the array.
+#SBATCH -o /CT/eeg-3d-face/work/eeg-3d-face/cluster/logs/Sapiens/%A_%a_%x_%N.out
+#SBATCH -e /CT/eeg-3d-face/work/eeg-3d-face/cluster/logs/Sapiens/%A_%a_%x_%N.err
+
+# --- ENVIRONMENT SETUP ---
 # Source the mamba configuration
 source configure_environment.sh
 
 # Activate the metashape environment
 micromamba activate metashape-py38
 
-# Paths list
-OUTPUT="./output/images/calib2"
-CAMERAS_XML="${OUTPUT}/cameras.xml"
+# --- DYNAMIC PATH CONFIGURATION ---
+# Base directory where the subject folders (C0002, C0003, etc.) are located for discovery
+BASE_DISCOVERY_DIR="./input/cameras"
+# Base directory where the output of the *previous* step (the input for this step) is located
+BASE_INPUT_DIR="./output"
 
+# Use the SLURM_ARRAY_TASK_ID to select the Nth directory from the list of found directories.
+# The -L flag ensures it follows the symlink if `input/cameras` is one.
+FOLDER_PATH=$(find -L "$BASE_DISCOVERY_DIR" -mindepth 1 -maxdepth 1 -type d | sort | sed -n "${SLURM_ARRAY_TASK_ID}p")
+
+# Safety check: exit if no directory was found for this task ID
+if [ -z "$FOLDER_PATH" ]; then
+    echo "Error: No input directory found for SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID}."
+    exit 1
+fi
+
+# Extract the folder name (e.g., "C0002") from the full path
+FOLDER_NAME=$(basename "$FOLDER_PATH")
+
+# Construct the full path to the input cameras.xml file
+CAMERAS_XML="${BASE_INPUT_DIR}/${FOLDER_NAME}/calibration/cameras.xml"
+
+# Safety check: ensure the input XML file exists before running the job
+if [ ! -f "$CAMERAS_XML" ]; then
+    echo "Error: Input XML file not found at $CAMERAS_XML"
+    exit 1
+fi
+
+# Construct the output directory for this job. The python script will write into this folder.
+# This assumes the script is run from the `/.../sapiens/pose` directory.
+OUTPUT_DIR="./output/${FOLDER_NAME}/calibration"
+mkdir -p "$OUTPUT_DIR"
+
+# --- JOB EXECUTION ---
+echo "--- SLURM Job Array Task ---"
+echo "Job Array ID: $SLURM_ARRAY_JOB_ID"
+echo "Task ID: $SLURM_ARRAY_TASK_ID"
+echo "Processing Folder: $FOLDER_NAME"
+echo "Input XML (CAMERAS_XML): $CAMERAS_XML"
+echo "Output Directory for Python Script: $OUTPUT_DIR"
+echo "----------------------------"
 echo "Using GPU: $CUDA_VISIBLE_DEVICES"
 echo "Working Directory: $PWD"
-echo "Processing: $FOLDER"
 
+# Launch the script with the dynamic path to the XML file
 python agi2nerf.py --xml_in "$CAMERAS_XML"
+
+echo "Task $SLURM_ARRAY_TASK_ID for folder $FOLDER_NAME completed successfully."
