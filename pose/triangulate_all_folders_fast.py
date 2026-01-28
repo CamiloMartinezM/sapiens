@@ -16,12 +16,25 @@ from pathlib import Path
 import argparse
 
 # ─── BASE PATHS & SETTINGS ───────────────────────────────────────────────
-transforms_path = '/CT/TalkingHead3/work/morphable_model_data/processed_data/sub_14/calibration/transforms.json'
-base_output_dir = 'sub_14/expressions'
-KEYPOINT_INDICES_PATH = '/CT/head_recordings3/work/sapiens/sapiens/pose/face_keypoint_indices_from_308.npy'
+# transforms_path = '/CT/TalkingHead3/work/morphable_model_data/processed_data/sub_14/calibration/transforms.json'
+# base_output_dir = 'sub_14/expressions'
+# KEYPOINT_INDICES_PATH = '/CT/head_recordings3/work/sapiens/sapiens/pose/face_keypoint_indices_from_308.npy'
+
+# # Camera optimization data file (saved after first folder)
+# OPTIMIZED_CAMERAS_FILE = os.path.join(os.path.dirname(base_output_dir), 'optimized_camera_data_fast.json')
+
+# Path to the calibration file (Verify if you need 'ses-1' or 'ses-2' and 'unbatched' vs 'batched')
+transforms_path = Path(
+    "/CT/eeg-3d-face/work/eeg-3d-face/submodules/sapiens/pose/output-gpu20-unbatched/subject-01/ses-1/calibration/transforms.json"
+)
+
+# Path to the expressions folder you want to process
+base_output_dir = Path(
+    "/CT/eeg-3d-face/work/eeg-3d-face/submodules/sapiens/pose/output-gpu20-unbatched/by_expression_2.0s/subject-01/expressions"
+)
 
 # Camera optimization data file (saved after first folder)
-OPTIMIZED_CAMERAS_FILE = os.path.join(os.path.dirname(base_output_dir), 'optimized_camera_data_fast.json')
+OPTIMIZED_CAMERAS_FILE = base_output_dir.parent / "optimized_camera_data_fast.json"
 
 # Camera settings
 cams = [1, 2, 3, 4, 5, 6, 7, 8, 9]

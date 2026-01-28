@@ -21,14 +21,15 @@ source configure_environment.sh
 micromamba activate metashape-py38
 
 # --- DYNAMIC PATH CONFIGURATION ---
-# Base directory where the subject folders (C0002, C0003, etc.) are located for discovery
+# Base directory where the subject folders are located for discovery
 BASE_DISCOVERY_DIR="./input/cameras"
 # Base directory where the output of the *previous* step (the input for this step) is located
 BASE_INPUT_DIR="./output"
 
 # Use the SLURM_ARRAY_TASK_ID to select the Nth directory from the list of found directories.
-# The -L flag ensures it follows the symlink if `input/cameras` is one.
-FOLDER_PATH=$(find -L "$BASE_DISCOVERY_DIR" -mindepth 1 -maxdepth 1 -type d | sort | sed -n "${SLURM_ARRAY_TASK_ID}p")
+# We use -mindepth 2 -maxdepth 2 to find session folders (e.g., subject-01/ses-1).
+# We search for "ses-*" to ensure we are picking up the correct directories.
+FOLDER_PATH=$(find -L "$BASE_DISCOVERY_DIR" -mindepth 2 -maxdepth 2 -type d -name "ses-*" | sort | sed -n "${SLURM_ARRAY_TASK_ID}p")
 
 # Safety check: exit if no directory was found for this task ID
 if [ -z "$FOLDER_PATH" ]; then
@@ -36,11 +37,14 @@ if [ -z "$FOLDER_PATH" ]; then
     exit 1
 fi
 
-# Extract the folder name (e.g., "C0002") from the full path
-FOLDER_NAME=$(basename "$FOLDER_PATH")
+# Extract names to reconstruct hierarchy
+SESSION_NAME=$(basename "$FOLDER_PATH")
+SUBJECT_DIR=$(dirname "$FOLDER_PATH")
+SUBJECT_NAME=$(basename "$SUBJECT_DIR")
 
 # Construct the full path to the input cameras.xml file
-CAMERAS_XML="${BASE_INPUT_DIR}/${FOLDER_NAME}/calibration/cameras.xml"
+# New structure: output/<SUBJECT>/<SESSION>/calibration/cameras.xml
+CAMERAS_XML="${BASE_INPUT_DIR}/${SUBJECT_NAME}/${SESSION_NAME}/calibration/cameras.xml"
 
 # Safety check: ensure the input XML file exists before running the job
 if [ ! -f "$CAMERAS_XML" ]; then
@@ -48,18 +52,18 @@ if [ ! -f "$CAMERAS_XML" ]; then
     exit 1
 fi
 
-# Construct the output directory for this job. The python script will write into this folder.
-# This assumes the script is run from the `/.../sapiens/pose` directory.
-OUTPUT_DIR="./output/${FOLDER_NAME}/calibration"
-mkdir -p "$OUTPUT_DIR"
+# The agi2nerf.py script writes transforms.json to the same directory as the input XML.
+# We define this variable just for logging purposes.
+OUTPUT_DIR=$(dirname "$CAMERAS_XML")
 
 # --- JOB EXECUTION ---
 echo "--- SLURM Job Array Task ---"
 echo "Job Array ID: $SLURM_ARRAY_JOB_ID"
 echo "Task ID: $SLURM_ARRAY_TASK_ID"
-echo "Processing Folder: $FOLDER_NAME"
+echo "Subject: $SUBJECT_NAME"
+echo "Session: $SESSION_NAME"
 echo "Input XML (CAMERAS_XML): $CAMERAS_XML"
-echo "Output Directory for Python Script: $OUTPUT_DIR"
+echo "Target Directory: $OUTPUT_DIR"
 echo "----------------------------"
 echo "Using GPU: $CUDA_VISIBLE_DEVICES"
 echo "Working Directory: $PWD"
